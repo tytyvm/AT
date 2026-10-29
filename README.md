@@ -47,10 +47,12 @@ npm test                        # decoder, market hours, webhook signature tests
 
 Create two services from this repo, plus a Postgres and a Redis database:
 
-| Service | Config file | Build | Start |
-|---|---|---|---|
-| web | `railway.json` (picked up by default) | `npm run build` | `npm start` |
-| worker | `/railway.worker.json` (set under Settings → Config-as-code) | `npx prisma generate` | `npm run worker` |
+| Service | Config file | Build | Pre-deploy | Start |
+|---|---|---|---|---|
+| web | `railway.json` (picked up by default) | `npm run build` | `npm run db:deploy` | `npm start` |
+| worker | `/railway.worker.json` (set under Settings → Config-as-code) | `npx prisma generate` | — | `npm run worker` |
+
+Migrations run in the web service's pre-deploy step, not the build, because Railway's private database URL is only reachable at runtime.
 
 Give both services `DATABASE_URL` and `REDIS_URL` from the database services, plus the other variables above.
 
