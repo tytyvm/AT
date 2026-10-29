@@ -1,0 +1,143 @@
+// Full schema for the MVP. Phase 1 uses Chain, Token, WatchedWallet,
+// ChainEvent and IndexerCursor. The rest is defined now so later phases
+// don't need disruptive migrations.
+
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"  url = env("DATABASE_URL") }
+
+model User {
+  id            String          @id @default(cuid())
+  email         String?         @unique
+  walletAddress String?         @unique // SIWE sign-in address (read-only, never signs txs)
+  telegramChatId String?
+  createdAt     DateTime        @default(now())
+  wallets       WatchedWallet[]
+  rules         AlertRule[]
+  alerts        Alert[]
+  ledger        CreditEntry[]
+  aiCalls       AiCall[]
+}
+
+model Chain {
+  id          Int     @id // EVM chain ID, e.g. 4663
+  name        String
+  explorerUrl String
+  tokens      Token[]
+}
+
+enum AssetType { NATIVE ERC20 STOCK_TOKEN LP_POSITION }
+
+model Token {
+  id            String    @id @default(cuid())
+  chainId       Int
+  address       String    // lowercase
+  symbol        String
+  decimals      Int
+  assetType     AssetType @default(ERC20)
+  priceFeed     String?   // Chainlink feed proxy (stock tokens)
+  chain         Chain     @relation(fields: [chainId], references: [id])
+  @@unique([chainId, address])
+}
+
+model WatchedWallet {
+  id        String   @id @default(cuid())
+  userId    String
+  chainId   Int
+  address   String   // lowercase
+  label     String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, chainId, address])
+  @@index([chainId, address])
+}
+
+enum EventKind {
+  TRANSFER          // ERC-20 or stock token
+  NATIVE_TRANSFER
+  SWAP
+  LP_ADD
+  LP_REMOVE
+  LP_NFT_TRANSFER   // v3/v4 position NFT moved (opened/closed/transferred)
+  CONTRACT_CALL
+}
+
+model ChainEvent {
+  id          String    @id @default(cuid())
+  chainId     Int
+  txHash      String
+  logIndex    Int       // -1 for non-log events (native transfers, calls)
+  blockNumber BigInt
+  timestamp   DateTime
+  kind        EventKind
+  wallet      String    // the watched wallet this event involves (lowercase)
+  protocol    String?   // "uniswap-v2" | "uniswap-v3" | "uniswap-v4" | null
+  contract    String    // emitting contract
+  data        Json      // normalized, kind-specific payload (amounts as strings)
+  usdValue    Decimal?  @db.Decimal(24, 6)
+  priceStale  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  @@unique([chainId, txHash, logIndex, wallet])
+  @@index([wallet, timestamp])
+  @@index([chainId, blockNumber])
+}
+
+model IndexerCursor {
+  chainId     Int      @id
+  lastBlock   BigInt
+  headBlock   BigInt   // latest chain head seen, for lag on /admin
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------- Phase 2: rules + alerts ----------
+enum RuleType { LARGE_TRANSFER NEW_TOKEN_TRADE LP_CHANGE NEW_CONTRACT BALANCE_CHANGE }
+
+model AlertRule {
+  id        String   @id @default(cuid())
+  userId    String
+  walletId  String?  // null = applies to all the user's wallets
+  type      RuleType
+  params    Json     // e.g. { "minUsd": 10000 } or { "pct": 20 }
+  channels  String[] // "feed" | "email" | "telegram"
+  enabled   Boolean  @default(true)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  userId    String
+  ruleId    String
+  eventIds  String[]
+  text      String
+  tier      Int      // 0 = template, 1 = small model
+  deliveredTo String[]
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}
+
+// ---------- Phase 3+: AI usage + credits ----------
+model AiCall {
+  id           String   @id @default(cuid())
+  userId       String?
+  task         String   // "alert" | "digest" | "chat" | "classify"
+  tier         Int
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Decimal  @db.Decimal(14, 8)
+  cached       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id])
+  @@index([createdAt])
+}
+
+model CreditEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  amountUsd Decimal  @db.Decimal(14, 8) // + top-up, - usage
+  reason    String   // "stripe_topup" | "ai_call"
+  refId     String?  // AiCall id or Stripe payment id
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}
