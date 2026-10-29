@@ -43,6 +43,17 @@ npm test                        # decoder, market hours, webhook signature tests
 | `INDEXER_POLL_MS` | no | Catch-up loop interval, default 5000 |
 | `INDEXER_START_BLOCK` | no | Block to start from on first run, default `latest` |
 
+## Deploy on Railway
+
+Create two services from this repo, plus a Postgres and a Redis database:
+
+| Service | Config file | Build | Start |
+|---|---|---|---|
+| web | `railway.json` (picked up by default) | `npm run build` | `npm start` |
+| worker | `/railway.worker.json` (set under Settings → Config-as-code) | `npx prisma generate` | `npm run worker` |
+
+Give both services `DATABASE_URL` and `REDIS_URL` from the database services, plus the other variables above.
+
 ## How ingestion works
 
 Robinhood Chain makes a block roughly every 100 ms, so scanning every block
