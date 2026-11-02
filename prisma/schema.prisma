@@ -2,8 +2,14 @@
 // ChainEvent and IndexerCursor. The rest is defined now so later phases
 // don't need disruptive migrations.
 
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql"  url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 model User {
   id            String          @id @default(cuid())
@@ -25,7 +31,12 @@ model Chain {
   tokens      Token[]
 }
 
-enum AssetType { NATIVE ERC20 STOCK_TOKEN LP_POSITION }
+enum AssetType {
+  NATIVE
+  ERC20
+  STOCK_TOKEN
+  LP_POSITION
+}
 
 model Token {
   id            String    @id @default(cuid())
@@ -89,7 +100,13 @@ model IndexerCursor {
 }
 
 // ---------- Phase 2: rules + alerts ----------
-enum RuleType { LARGE_TRANSFER NEW_TOKEN_TRADE LP_CHANGE NEW_CONTRACT BALANCE_CHANGE }
+enum RuleType {
+  LARGE_TRANSFER
+  NEW_TOKEN_TRADE
+  LP_CHANGE
+  NEW_CONTRACT
+  BALANCE_CHANGE
+}
 
 model AlertRule {
   id        String   @id @default(cuid())
