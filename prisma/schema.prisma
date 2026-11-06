@@ -22,6 +22,18 @@ model User {
   alerts        Alert[]
   ledger        CreditEntry[]
   aiCalls       AiCall[]
+  sessions      Session[]
+}
+
+// Browser sessions for the app. The cookie holds a random token; only its
+// SHA-256 hash is stored, so a database leak can't be replayed as a login.
+model Session {
+  id        String   @id // sha256(token), hex
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
 }
 
 model Chain {

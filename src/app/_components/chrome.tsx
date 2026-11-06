@@ -2,7 +2,7 @@ import Link from "next/link";
 
 type Page = "home" | "feed" | "docs";
 
-function Mark() {
+export function Mark() {
   // An aperture: the ring is the chain, the offset dot is the wallet you're watching.
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
@@ -30,7 +30,7 @@ export function SiteHeader({ current }: { current: Page }) {
           {link("/docs", "docs", "Docs")}
           <Link href="/#roadmap">Roadmap</Link>
         </nav>
-        <span className="phase-chip">Phase 1 / 6</span>
+        <Link href="/app" className="nav-cta">Launch app →</Link>
       </div>
     </header>
   );
