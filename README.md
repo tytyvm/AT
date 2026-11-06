@@ -4,7 +4,7 @@ Watch wallets on Robinhood Chain and get alerts, daily digests, and chat answers
 written by cheap open-source models. Read-only: the app never holds keys or signs
 transactions.
 
-**Status: Phase 1 of 6 complete** (chain config + data ingestion).
+**Status: Phase 1 of 6 complete** (data ingestion + the app: wallet sign-in and self-service watchlists at `/app`).
 
 | Phase | What | Status |
 |---|---|---|

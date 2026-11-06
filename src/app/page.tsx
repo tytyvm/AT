@@ -40,6 +40,13 @@ const VOCAB = [
   ["CONTRACT_CALL", "The wallet called a contract that emitted nothing we recognise, logged by its function selector."],
 ];
 
+const ROUTES: { job: string; tier: 0 | 1 | 2; how: string }[] = [
+  { job: "Whale #1 moved 50,000 USDC to a new address", tier: 0, how: "Rule + template. No model, no cost." },
+  { job: "Is this the first time they’ve touched this token?", tier: 1, how: "Small open model classifies the event." },
+  { job: "Summarise what my wallets did today", tier: 2, how: "Larger open model writes the digest." },
+  { job: "Why is whale #1 rotating out of stock tokens?", tier: 2, how: "Agent queries events and prices, cites each tx." },
+];
+
 const PHASES: { ph: string; dest: string; detail: string; status: "arrived" | "boarding" | "scheduled" }[] = [
   { ph: "01", dest: "Ingestion", detail: "Chain config, data adapters, event decoding, indexer, webhook", status: "arrived" },
   { ph: "02", dest: "Rules & alerts", detail: "Large transfers, new tokens, LP changes. Delivered to feed, email, Telegram", status: "boarding" },
@@ -73,17 +80,17 @@ export default async function Home() {
       <main>
         <div className="wrap hero">
           <div>
-            <span className="label">Wallet intelligence · Robinhood Chain</span>
+            <span className="label">Agentic wallet tracking · Robinhood Chain</span>
             <h1>
               Every move a wallet makes, <em>read back to you.</em>
             </h1>
             <p className="lede">
-              Pick the wallets you care about: a fund, a whale, your own. The tracker follows them across Robinhood Chain and turns
-              raw logs into a clean record of transfers, swaps, stock-token trades and liquidity moves. It only ever reads. It
-              never holds a key or signs anything.
+              Pick the wallets you care about: a fund, a whale, your own. The tracker follows them across Robinhood Chain, and a
+              router of open-source models turns what they do into alerts, digests and answers. It’s cheap, it’s anonymous, and it
+              only ever reads: no email, no keys, no transactions.
             </p>
             <div className="actions">
-              <Link className="btn btn-solid" href="/feed">Open the live feed →</Link>
+              <Link className="btn btn-solid" href="/app">Launch app →</Link>
               <Link className="btn btn-line" href="/docs">Read the docs</Link>
             </div>
           </div>
@@ -179,27 +186,61 @@ export default async function Home() {
           </div>
         </section>
 
+        <section className="section" id="router">
+          <div className="wrap">
+            <div className="section-head">
+              <span className="label">The model router</span>
+              <div>
+                <h2>Every job goes to the cheapest model that can do it.</h2>
+                <p>
+                  Most of what a wallet does doesn’t need AI at all, and most of the rest doesn’t need a big model. The router sends each job to the
+                  smallest tier that can handle it, using open-weight models that can run anywhere, including your own machine.
+                </p>
+              </div>
+            </div>
+            <div className="switchboard">
+              {ROUTES.map((r) => (
+                <div className="route" key={r.job}>
+                  <span className="job">“{r.job}”</span>
+                  <span className="leader" aria-hidden="true" />
+                  <span className={`tier tier-${r.tier}`}>
+                    <b>Tier {r.tier}</b>
+                    {r.how}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <dl className="tenets">
+              <div><dt>Cheap</dt><dd>Templates first, small models next, large models only when a question needs them.</dd></div>
+              <div><dt>Anonymous</dt><dd>No email or password. Sign in with a wallet signature, or not at all.</dd></div>
+              <div><dt>Open</dt><dd>Open-weight models on interchangeable providers, so no single company sits in the middle.</dd></div>
+              <div><dt>Agentic</dt><dd>The agent can look up events and prices itself, and every answer cites its transactions.</dd></div>
+            </dl>
+            <p className="not-yet">The router arrives in Phase 3. Today the app tracks wallets and decodes their activity; the models plug in on top.</p>
+          </div>
+        </section>
+
         <section className="section" id="access">
           <div className="wrap">
             <div className="section-head">
               <span className="label">Using it today</span>
               <div>
                 <h2>Three ways in, while it’s still early.</h2>
-                <p>This is Phase 1 of 6. The engine works; accounts and alerts come next. Here’s what you can do right now.</p>
+                <p>The tracking engine works today. Alerts, digests and the agent come next. Here’s what you can do right now.</p>
               </div>
             </div>
             <div className="tickets">
               <div className="ticket">
                 <span className="who">Anyone</span>
-                <h3>Watch the live feed</h3>
-                <p>Every decoded event for the wallets on the watchlist, newest first, each linked to the block explorer.</p>
-                <Link className="go" href="/feed">Open the feed →</Link>
+                <h3>Launch the app</h3>
+                <p>Connect a wallet or stay anonymous, add the wallets you want to follow, and watch their activity land as it happens.</p>
+                <Link className="go" href="/app">Launch app →</Link>
               </div>
               <div className="ticket">
-                <span className="who">Wallet watchers</span>
-                <h3>Get a wallet on the list</h3>
-                <p>There’s no sign-up yet. The operator adds wallets with a label, and the indexer picks them up on its next pass.</p>
-                <Link className="go" href="/docs#watch-a-wallet">How wallets are added →</Link>
+                <span className="who">Onlookers</span>
+                <h3>Browse the public feed</h3>
+                <p>See everything the indexer has decoded across all watched wallets, newest first, each linked to the block explorer.</p>
+                <Link className="go" href="/feed">Open the feed →</Link>
               </div>
               <div className="ticket">
                 <span className="who">Builders</span>
@@ -208,7 +249,7 @@ export default async function Home() {
                 <Link className="go" href="/docs#quickstart">Self-host guide →</Link>
               </div>
             </div>
-            <p className="not-yet">Not yet: wallet sign-in, adding wallets yourself, alerts, digests, chat. All on the board below.</p>
+            <p className="not-yet">Not yet: alerts, digests and chat with the agent. All on the board below.</p>
           </div>
         </section>
 

@@ -6,9 +6,9 @@ export const metadata: Metadata = { title: "Docs" };
 
 const NAV: { group: string; items: [string, string][] }[] = [
   { group: "Getting started", items: [["introduction", "Introduction"], ["how-it-works", "How it works"], ["quickstart", "Quickstart"], ["deploy-railway", "Deploy on Railway"]] },
-  { group: "Using the tracker", items: [["live-feed", "Live feed"], ["watch-a-wallet", "Watch a wallet"], ["event-types", "Event types"], ["stock-tokens", "Stock tokens"]] },
+  { group: "Using the tracker", items: [["launch-app", "Launch the app"], ["sign-in", "Sign-in & privacy"], ["watch-a-wallet", "Watch a wallet"], ["live-feed", "Public feed"], ["event-types", "Event types"], ["stock-tokens", "Stock tokens"]] },
   { group: "Reference", items: [["configuration", "Configuration"], ["webhook-api", "Webhook API"], ["data-adapters", "Data adapters"], ["chains", "Adding a chain"], ["data-model", "Data model"]] },
-  { group: "Project", items: [["security", "Security"], ["roadmap", "Roadmap"], ["limitations", "Known limitations"], ["faq", "FAQ"]] },
+  { group: "Project", items: [["model-router", "Model router"], ["security", "Security"], ["roadmap", "Roadmap"], ["limitations", "Known limitations"], ["faq", "FAQ"]] },
 ];
 
 function Code({ label, children }: { label: string; children: string }) {
@@ -74,14 +74,14 @@ export default function Docs() {
           <Section id="introduction" eyebrow="Getting started" title="Introduction">
             <p>
               Agentic Wallet Tracker follows a set of wallets on <strong>Robinhood Chain</strong> (chain ID 4663) and records everything they do:
-              token transfers, ETH sends, swaps, liquidity changes, LP position moves and stock-token trades. Each action becomes a normalized
-              event you can read in the <Link href="/feed">live feed</Link>, and later phases turn those events into alerts, daily digests and
-              chat answers written by low-cost open models.
+              token transfers, ETH sends, swaps, liquidity changes, LP position moves and stock-token trades. You open the{" "}
+              <Link href="/app">app</Link>, add the wallets you care about, and their activity lands in your dashboard. Later phases add a{" "}
+              <a href="#model-router">router of open-source models</a> that turns those events into alerts, daily digests and answers.
             </p>
             <p>The tracker is <strong>read-only by design</strong>. It never asks for a private key, never connects a wallet for signing, and never sends a transaction.</p>
             <Callout title="Status">
-              Phase 1 of 6 is complete: chain configuration, data ingestion, event decoding, the indexer and the real-time webhook. Accounts,
-              alerts and digests arrive in later phases. See the <a href="#roadmap">roadmap</a>.
+              The tracking engine and the app are live: sign in, build a watchlist, see decoded activity. Alerts, digests and the agent arrive
+              in later phases. See the <a href="#roadmap">roadmap</a>.
             </Callout>
           </Section>
 
@@ -153,9 +153,67 @@ npm test                          # decoder, market hours, webhook signature`}</
           </Section>
 
           {/* ---------------- Using the tracker ---------------- */}
-          <Section id="live-feed" eyebrow="Using the tracker" title="Live feed">
+          <Section id="launch-app" eyebrow="Using the tracker" title="Launch the app">
+            <p>Click <strong>Launch app</strong> on the home page, or go straight to <Link href="/app">/app</Link>.</p>
+            <ol className="steps">
+              <li><strong>Sign in.</strong> Connect a browser wallet and sign a free message, or continue anonymously. See <a href="#sign-in">Sign-in &amp; privacy</a>.</li>
+              <li><strong>Add wallets.</strong> Paste an address, give it a label if you like, and press <em>Watch wallet</em>. You can watch up to 25.</li>
+              <li><strong>Watch the activity.</strong> Transfers, swaps and liquidity moves from your wallets appear in the Activity column, newest first, each linked to the explorer.</li>
+            </ol>
+            <Callout title="From the moment you add it">
+              The indexer picks up a new wallet on its next pass, within seconds, and records activity from then on. Older history isn’t
+              backfilled automatically yet.
+            </Callout>
+          </Section>
+
+          <Section id="sign-in" eyebrow="Using the tracker" title="Sign-in & privacy">
+            <p>There are no emails, passwords or profiles. You choose how much to reveal:</p>
+            <div className="ref-scroll">
+              <table className="ref">
+                <thead><tr><th>Mode</th><th>How it works</th><th>What we store</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Wallet</strong></td><td>Your wallet signs a Sign-In with Ethereum (EIP-4361) message. It’s free, sends no transaction and grants no spending rights.</td><td>Your public address and your watchlist.</td></tr>
+                  <tr><td><strong>Anonymous</strong></td><td>A random workspace tied to this browser’s cookie. Nothing identifies you.</td><td>Only your watchlist.</td></tr>
+                </tbody>
+              </table>
+            </div>
             <p>
-              <Link href="/feed">/feed</Link> lists the latest 100 decoded events across all watched wallets, newest first. Wallets show their label
+              Started anonymously and want to keep your list? Press <strong>Connect wallet &amp; keep list</strong> in the dashboard. The workspace
+              is upgraded in place; if that wallet already has a list, the two are merged. Signing out of an anonymous workspace deletes it.
+            </p>
+            <p>
+              Sessions last 30 days. The cookie holds a random key, and the server stores only its SHA-256 hash. Smart-contract wallets
+              (Safe and similar) aren’t supported for sign-in yet.
+            </p>
+            <Callout kind="warn" title="Check what you sign">
+              The sign-in message names this site and says it grants no spending rights. If your wallet ever shows a transaction, an
+              approval or a different site, reject it.
+            </Callout>
+          </Section>
+
+          <Section id="watch-a-wallet" eyebrow="Using the tracker" title="Watch a wallet">
+            <p>
+              In the app, paste any Robinhood Chain address into <em>Wallet address</em>, add an optional label (up to 40 characters) and press{" "}
+              <em>Watch wallet</em>. Addresses are case-insensitive, and adding the same wallet twice is caught. Remove one at any time with{" "}
+              <em>Remove</em>.
+            </p>
+            <p>Good places to find active wallets: “Top accounts” and recent large transfers on <code>robinhoodchain.blockscout.com</code>.</p>
+            <h3>For operators: seeding wallets in bulk</h3>
+            <p>To preload wallets on a fresh install (for a demo, say), list them in <code>prisma/seed.ts</code> and run the seed:</p>
+            <Code label="Terminal">{`# Local
+npm run db:seed
+
+# Railway: copy DATABASE_PUBLIC_URL from the Postgres service's Variables tab
+DATABASE_URL="postgresql://…proxy.rlwy.net:…/railway" npm run db:seed`}</Code>
+            <p>
+              Seeded wallets belong to a demo user and appear in the public feed. With <code>INDEXER_START_BLOCK=latest</code> (the default), a
+              fresh indexer records activity from the moment it starts; set a block number to backfill history.
+            </p>
+          </Section>
+
+          <Section id="live-feed" eyebrow="Using the tracker" title="Public feed">
+            <p>
+              <Link href="/feed">/feed</Link> is a public, read-only view of the latest 100 decoded events across everyone’s watched wallets, newest first. It shows what the indexer is doing without signing in. Wallets show their label
               when they have one. Every transaction links to <code>robinhoodchain.blockscout.com</code> so you can verify it independently.
             </p>
             <div className="ref-scroll">
@@ -169,33 +227,6 @@ npm test                          # decoder, market hours, webhook signature`}</
                 </tbody>
               </table>
             </div>
-          </Section>
-
-          <Section id="watch-a-wallet" eyebrow="Using the tracker" title="Watch a wallet">
-            <p>
-              Phase 1 has no sign-up, so wallets are added by whoever runs the tracker. Wallet sign-in (SIWE, read-only) and self-service
-              watchlists arrive with Phase 2.
-            </p>
-            <h3>1. Add the address to the seed file</h3>
-            <Code label="prisma/seed.ts">{`const SAMPLE_WALLETS = [
-  { address: "0xYourWalletAddressHere", label: "whale #1" },
-  { address: "0xAnotherAddress",        label: "my wallet" },
-];`}</Code>
-            <p>Good places to find active wallets: “Top accounts” and recent large transfers on <code>robinhoodchain.blockscout.com</code>.</p>
-            <h3>2. Run the seed against your database</h3>
-            <Code label="Terminal">{`# Local
-npm run db:seed
-
-# Railway: copy DATABASE_PUBLIC_URL from the Postgres service's Variables tab
-DATABASE_URL="postgresql://…proxy.rlwy.net:…/railway" npm run db:seed`}</Code>
-            <Callout title="Why the public URL?">
-              Railway’s default <code>DATABASE_URL</code> uses a private address that only works inside Railway. From your own machine, use the
-              <code> DATABASE_PUBLIC_URL</code> instead.
-            </Callout>
-            <p>
-              The seed is safe to run repeatedly. It also registers the chain and the WETH token. With <code>INDEXER_START_BLOCK=latest</code> (the
-              default), a fresh indexer records activity from the moment it starts; set a block number to backfill history.
-            </p>
           </Section>
 
           <Section id="event-types" eyebrow="Using the tracker" title="Event types">
@@ -311,7 +342,8 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
                 <thead><tr><th>Table</th><th>Phase</th><th>Holds</th></tr></thead>
                 <tbody>
                   <tr><td><code>Chain</code>, <code>Token</code></td><td>1</td><td>Supported chains; known tokens incl. stock tokens and their price feeds.</td></tr>
-                  <tr><td><code>User</code>, <code>WatchedWallet</code></td><td>1</td><td>Owners and the wallets they follow, with labels.</td></tr>
+                  <tr><td><code>User</code>, <code>WatchedWallet</code></td><td>1</td><td>Owners (a wallet address, or none for anonymous) and the wallets they follow, with labels.</td></tr>
+                  <tr><td><code>Session</code></td><td>1</td><td>Signed-in browsers, stored as hashed keys with an expiry.</td></tr>
                   <tr><td><code>ChainEvent</code></td><td>1</td><td>Every decoded event with its JSON payload.</td></tr>
                   <tr><td><code>IndexerCursor</code></td><td>1</td><td>Last processed block and chain head, per chain.</td></tr>
                   <tr><td><code>AlertRule</code>, <code>Alert</code></td><td>2</td><td>User rules and the alerts they produced.</td></tr>
@@ -322,11 +354,33 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
           </Section>
 
           {/* ---------------- Project ---------------- */}
+          <Section id="model-router" eyebrow="Project" title="Model router">
+            <p>
+              The core idea of the project: every job goes to the cheapest model that can do it well, and every model is open-weight, so it
+              can run on any provider or on your own hardware. This arrives in Phase 3; the tiers below are the design.
+            </p>
+            <div className="ref-scroll">
+              <table className="ref">
+                <thead><tr><th>Tier</th><th>Handles</th><th>Runs on</th></tr></thead>
+                <tbody>
+                  <tr><td>0</td><td>Rule matches and alert text from templates, e.g. “whale #1 moved 50,000 USDC”.</td><td>No model at all.</td></tr>
+                  <tr><td>1</td><td>Classifying events and writing short alert copy.</td><td>A small open model.</td></tr>
+                  <tr><td>2</td><td>Daily digests and questions that need tools (look up events, prices) with cited transactions.</td><td>A larger open model, only when needed.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Every call will be logged with its tier, model, tokens and cost (the <code>AiCall</code> table already exists), so you can see
+              where spend goes. Local models run through Ollama; see <code>docker-compose.yml</code>.
+            </p>
+          </Section>
+
           <Section id="security" eyebrow="Project" title="Security">
             <ul>
               <li><strong>No private keys.</strong> The system has no code path that signs or sends a transaction.</li>
               <li><strong>Verified webhooks.</strong> Every webhook is checked with HMAC-SHA256 and a constant-time comparison before anything is processed.</li>
-              <li><strong>Read-only sign-in.</strong> The planned wallet sign-in (SIWE) proves ownership of an address. It never grants spending rights.</li>
+              <li><strong>Read-only sign-in.</strong> Wallet sign-in (SIWE, EIP-4361) proves ownership of an address with a signed message, checked server-side against a single-use nonce. It never grants spending rights.</li>
+              <li><strong>Hashed sessions.</strong> Session cookies are HTTP-only; the database keeps only a SHA-256 hash of each session key.</li>
               <li><strong>Verifiable output.</strong> Every event links to its transaction on the public explorer.</li>
               <li><strong>Secrets stay out of git.</strong> Configuration lives in environment variables; <code>.env</code> is ignored.</li>
             </ul>
@@ -340,8 +394,8 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
               <table className="ref">
                 <thead><tr><th>Phase</th><th>Scope</th><th>Status</th></tr></thead>
                 <tbody>
-                  <tr><td>1</td><td>Chain config, data adapters, event decoding, indexer, webhook</td><td>Done</td></tr>
-                  <tr><td>2</td><td>Rules engine and alerts (feed, email, Telegram); USD pricing; webhook address sync</td><td>Next</td></tr>
+                  <tr><td>1</td><td>Chain config, data adapters, event decoding, indexer, webhook, app with wallet sign-in and watchlists</td><td>Done</td></tr>
+                  <tr><td>2</td><td>Rules engine and alerts (feed, email, Telegram); USD pricing; webhook address sync; history backfill for new wallets</td><td>Next</td></tr>
                   <tr><td>3</td><td>Model router (tier 0/1/2) and daily digests</td><td>Planned</td></tr>
                   <tr><td>4</td><td>Chat with tool calling and cited answers</td><td>Planned</td></tr>
                   <tr><td>5</td><td>Credits ledger, Stripe top-ups, payment-method interface</td><td>Planned</td></tr>
@@ -377,12 +431,16 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
                 </p>
               </details>
               <details>
-                <summary>The indexer is running but the feed is empty.</summary>
-                <p>Either no wallets are on the watchlist, or they haven’t moved since the indexer started. Add active wallets (see <a href="#watch-a-wallet">Watch a wallet</a>) or set <code>INDEXER_START_BLOCK</code> to backfill.</p>
+                <summary>The indexer is running but my activity is empty.</summary>
+                <p>Your wallets haven’t moved since you added them. Activity is recorded from the moment a wallet is added, so pick active wallets (see <a href="#watch-a-wallet">Watch a wallet</a>), or, as an operator, set <code>INDEXER_START_BLOCK</code> to backfill.</p>
               </details>
               <details>
                 <summary>Which wallets can I track?</summary>
                 <p>Any address on Robinhood Chain. Wallet activity is public; the tracker organizes it, it doesn’t reveal anything that isn’t already on-chain.</p>
+              </details>
+              <details>
+                <summary>Do I need a wallet to use the app?</summary>
+                <p>No. Continue anonymously and your watchlist lives in that browser. Connect a wallet any time to keep it across devices.</p>
               </details>
               <details>
                 <summary>Why are there no USD values?</summary>
