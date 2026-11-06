@@ -7,7 +7,7 @@
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "start": "prisma migrate deploy && next start -p ${PORT:-3000}",
     "worker": "tsx src/workers/indexer.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
