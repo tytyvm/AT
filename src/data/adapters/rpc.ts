@@ -1,5 +1,5 @@
 import { createPublicClient, http, pad, type PublicClient } from "viem";
-import type { ChainConfig } from "@/chains";
+import type { EvmChainConfig } from "@/chains";
 import type { Hex, TxContext } from "../types";
 import type { ChainDataAdapter } from "./types";
 import { TOPIC } from "../decode";
@@ -16,11 +16,28 @@ export class RpcAdapter implements ChainDataAdapter {
   protected client: PublicClient;
   private blockTs = new Map<bigint, Date>();
 
-  constructor(protected chain: ChainConfig, rpcUrl = chain.rpcUrl) {
+  constructor(protected chain: EvmChainConfig, rpcUrl = chain.rpcUrl) {
     this.client = createPublicClient({ transport: http(rpcUrl, { batch: true, retryCount: 3 }) });
   }
 
   getHead() { return this.client.getBlockNumber(); }
+
+  /**
+   * Exact native-balance change for a wallet across one block, with the gas it paid added back. This catches
+   * ETH that moves in internal calls (router unwraps, Uniswap v4 payouts, refunds), which emit no events.
+   * Only meaningful when the wallet has a single transaction in that block.
+   */
+  async nativeChange(wallet: string, blockNumber: bigint, feePaid: bigint): Promise<bigint | null> {
+    try {
+      const [before, after] = await Promise.all([
+        this.client.getBalance({ address: wallet as Hex, blockNumber: blockNumber - 1n }),
+        this.client.getBalance({ address: wallet as Hex, blockNumber }),
+      ]);
+      return after - before + feePaid;
+    } catch {
+      return null; // node without history for that block: callers fall back to the event-based estimate
+    }
+  }
 
   async findWalletTxs(wallets: string[], fromBlock: bigint, toBlock: bigint): Promise<Hex[]> {
     if (!wallets.length) return [];
@@ -54,6 +71,7 @@ export class RpcAdapter implements ChainDataAdapter {
     }
     return {
       hash, from: tx.from, to: tx.to ?? null, value: tx.value, input: tx.input,
+      fee: receipt.gasUsed * receipt.effectiveGasPrice,
       blockNumber: receipt.blockNumber, timestamp: ts,
       logs: receipt.logs.map((l) => ({
         address: l.address, topics: l.topics as Hex[], data: l.data,

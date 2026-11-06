@@ -12,7 +12,8 @@ export function AddWalletForm({ disabled }: { disabled: boolean }) {
     <form ref={form} action={action} className="add-wallet">
       <label>
         <span className="label">Wallet address</span>
-        <input name="address" placeholder="0x…" autoComplete="off" spellCheck={false} required disabled={disabled} />
+        <input name="address" placeholder="0x… or Solana address" autoComplete="off" spellCheck={false} required disabled={disabled} />
+        <span className="hint">Robinhood Chain or Solana, detected automatically. Bots that trade through their own contract: watch the contract.</span>
       </label>
       <label>
         <span className="label">Label <em>(optional)</em></span>

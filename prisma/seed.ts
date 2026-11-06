@@ -1,8 +1,11 @@
 import { PrismaClient } from "@prisma/client";
+import { SHOWCASE_EMAIL } from "../src/lib/showcase";
+import { parseWalletInput } from "../src/lib/watchlist";
 const prisma = new PrismaClient();
 
-// Replace these with real wallets you want to follow. Good sources: the
-// "Top accounts" and recent large transfers on robinhoodchain.blockscout.com.
+// Showcase wallets for the public feed. Robinhood Chain (0x…) or Solana addresses; the chain is
+// detected from the format. Good sources: "Top accounts" on robinhoodchain.blockscout.com, solscan.io.
+// Avoid hyperactive bots here: each of their transactions costs data-provider calls.
 const SAMPLE_WALLETS: { address: string; label: string }[] = [
   { address: "0x0000000000000000000000000000000000000001", label: "Replace me: whale #1" },
   { address: "0x0000000000000000000000000000000000000002", label: "Replace me: my wallet" },
@@ -33,15 +36,17 @@ async function main() {
       update: {},
     });
   }
-  const user = await prisma.user.upsert({ where: { email: "demo@example.com" }, create: { email: "demo@example.com" }, update: {} });
+  const user = await prisma.user.upsert({ where: { email: SHOWCASE_EMAIL }, create: { email: SHOWCASE_EMAIL }, update: {} });
   for (const w of SAMPLE_WALLETS) {
-    const address = w.address.toLowerCase();
+    const input = parseWalletInput(w.address, w.label);
+    if (!input.ok) { console.warn(`Skipping ${w.address}: ${input.error}`); continue; }
+    const { chainId, address, label } = input;
     await prisma.watchedWallet.upsert({
-      where: { userId_chainId_address: { userId: user.id, chainId: 4663, address } },
-      create: { userId: user.id, chainId: 4663, address, label: w.label },
-      update: { label: w.label },
+      where: { userId_chainId_address: { userId: user.id, chainId, address } },
+      create: { userId: user.id, chainId, address, label },
+      update: { label },
     });
   }
-  console.log("Seeded demo user with", SAMPLE_WALLETS.length, "wallets");
+  console.log("Seeded showcase account with", SAMPLE_WALLETS.length, "wallets");
 }
 main().finally(() => prisma.$disconnect());

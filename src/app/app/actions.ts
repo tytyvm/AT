@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { createSession, destroySession, getSessionUser } from "@/lib/session";
 import { MAX_WALLETS_PER_USER, parseWalletInput } from "@/lib/watchlist";
 
-const CHAIN_ID = 4663;
+const SIWE_CHAIN_ID = 4663; // Robinhood Chain: the chain named in the Sign-In with Ethereum message
 const NONCE_COOKIE = "awt_siwe_nonce";
 
 async function origin() {
@@ -29,7 +29,7 @@ export async function startWalletSignIn(address: string): Promise<{ message?: st
   const { domain, uri } = await origin();
   const message = createSiweMessage({
     address: getAddress(address),
-    chainId: CHAIN_ID,
+    chainId: SIWE_CHAIN_ID,
     domain,
     uri,
     nonce,
@@ -105,11 +105,11 @@ export async function addWallet(_prev: AddWalletState, form: FormData): Promise<
   if (count >= MAX_WALLETS_PER_USER) return { error: `You can watch up to ${MAX_WALLETS_PER_USER} wallets for now.` };
 
   const exists = await prisma.watchedWallet.findUnique({
-    where: { userId_chainId_address: { userId: user.id, chainId: CHAIN_ID, address: input.address } },
+    where: { userId_chainId_address: { userId: user.id, chainId: input.chainId, address: input.address } },
   });
   if (exists) return { error: `You're already watching that wallet as “${exists.label}”.` };
 
-  await prisma.watchedWallet.create({ data: { userId: user.id, chainId: CHAIN_ID, address: input.address, label: input.label } });
+  await prisma.watchedWallet.create({ data: { userId: user.id, chainId: input.chainId, address: input.address, label: input.label } });
   revalidatePath("/app");
   return { added: input.label };
 }

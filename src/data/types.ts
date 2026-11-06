@@ -16,6 +16,7 @@ export interface TxContext {
   from: Hex;
   to: Hex | null;
   value: bigint; // native ETH sent
+  fee?: bigint; // gas paid by the sender (gasUsed × effectiveGasPrice)
   input: Hex;    // calldata ("0x" for plain transfers)
   blockNumber: bigint;
   timestamp: Date;

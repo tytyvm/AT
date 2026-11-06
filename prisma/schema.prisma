@@ -104,6 +104,36 @@ model ChainEvent {
   @@index([chainId, blockNumber])
 }
 
+enum ActionKind {
+  BUY
+  SELL
+  SWAP
+  SEND
+  RECEIVE
+  LP_ADD
+  LP_REMOVE
+}
+
+// One readable action per wallet per transaction, built from net balance
+// changes ("bought 2.1M BONK for 1.4 SOL"). Works on every chain family.
+model WalletAction {
+  id           String     @id @default(cuid())
+  chainId      Int
+  txHash       String
+  wallet       String     // as stored in WatchedWallet (lowercase on EVM, exact on Solana)
+  blockNumber  BigInt     // block on EVM, slot on Solana
+  timestamp    DateTime
+  kind         ActionKind
+  venue        String?    // "uniswap-v3", "jupiter", "pump.fun"…
+  counterparty String?    // the other side of a send/receive
+  legs         Json       // [{ asset, symbol, decimals, delta }], amounts as strings in base units
+  usdValue     Decimal?   @db.Decimal(24, 2)
+  createdAt    DateTime   @default(now())
+  @@unique([chainId, txHash, wallet])
+  @@index([wallet, timestamp])
+  @@index([chainId, blockNumber])
+}
+
 model IndexerCursor {
   chainId     Int      @id
   lastBlock   BigInt

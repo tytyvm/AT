@@ -1,6 +1,6 @@
 # Agentic Wallet Tracker
 
-Watch wallets on Robinhood Chain and get alerts, daily digests, and chat answers
+Watch wallets on Robinhood Chain and Solana and get alerts, daily digests, and chat answers
 written by cheap open-source models. Read-only: the app never holds keys or signs
 transactions.
 
@@ -37,9 +37,10 @@ npm test                        # decoder, market hours, webhook signature tests
 | `DATABASE_URL` | yes | Postgres connection string |
 | `REDIS_URL` | yes | Redis for the BullMQ job queue |
 | `DATA_ADAPTER` | no | `alchemy` (default) or `rpc` |
-| `ALCHEMY_API_KEY` | recommended | From dashboard.alchemy.com, app on Robinhood Chain mainnet |
+| `ALCHEMY_API_KEY` | recommended | From dashboard.alchemy.com, with Robinhood Chain and Solana mainnet enabled; also prices ETH/SOL |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY` | for real-time | From the Alchemy webhook page |
 | `ROBINHOOD_RPC_URL` | no | Override the public RPC (rate limited) |
+| `SOLANA_RPC_URL` | no | Solana endpoint when there's no Alchemy key (public one is heavily rate limited) |
 | `INDEXER_POLL_MS` | no | Catch-up loop interval, default 5000 |
 | `INDEXER_START_BLOCK` | no | Block to start from on first run, default `latest` |
 
@@ -57,6 +58,17 @@ Migrations run when the web service starts, not during the build, because Railwa
 Give both services `DATABASE_URL` and `REDIS_URL` from the database services, plus the other variables above.
 
 ## How ingestion works
+
+Every transaction a watched wallet takes part in becomes one **action** (bought, sold, swapped,
+sent, received, LP add/remove), built from the wallet's net balance changes, so it works for any
+DEX or launchpad. Builders: `src/data/actions/evm.ts` and `src/data/actions/solana.ts`; tests run
+against real mainnet transactions in `tests/fixtures/`.
+
+**Solana:** the indexer polls `getSignaturesForAddress` per wallet and parses each transaction's
+balance changes. Account rent and network fees are excluded; it stays ~40 slots behind the tip so
+late-indexed signatures aren't skipped.
+
+**Robinhood Chain:**
 
 Robinhood Chain makes a block roughly every 100 ms, so scanning every block
 would be slow and expensive. Instead:

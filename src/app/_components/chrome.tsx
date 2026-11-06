@@ -23,7 +23,7 @@ export function SiteHeader({ current }: { current: Page }) {
         <Link href="/" className="wordmark">
           <Mark />
           <span className="wm-text">Agentic Wallet Tracker</span>
-          <small>4663</small>
+          <small>RH · SOL</small>
         </Link>
         <nav className="nav" aria-label="Main">
           {link("/feed", "feed", "Live feed")}
@@ -40,7 +40,7 @@ export function SiteFooter() {
   return (
     <footer className="colophon">
       <div className="wrap">
-        <span>Agentic Wallet Tracker · read-only wallet intelligence for Robinhood Chain (4663)</span>
+        <span>Agentic Wallet Tracker · read-only wallet intelligence for Robinhood Chain and Solana</span>
         <span>
           <Link href="/feed">Feed</Link> · <Link href="/docs">Docs</Link> · <Link href="/docs#security">Security</Link>
         </span>

@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Docs" };
 
 const NAV: { group: string; items: [string, string][] }[] = [
   { group: "Getting started", items: [["introduction", "Introduction"], ["how-it-works", "How it works"], ["quickstart", "Quickstart"], ["deploy-railway", "Deploy on Railway"]] },
-  { group: "Using the tracker", items: [["launch-app", "Launch the app"], ["sign-in", "Sign-in & privacy"], ["watch-a-wallet", "Watch a wallet"], ["live-feed", "Public feed"], ["event-types", "Event types"], ["stock-tokens", "Stock tokens"]] },
+  { group: "Using the tracker", items: [["launch-app", "Launch the app"], ["sign-in", "Sign-in & privacy"], ["watch-a-wallet", "Watch a wallet"], ["actions", "Actions"], ["live-feed", "Public feed"], ["event-types", "Event types"], ["stock-tokens", "Stock tokens"]] },
   { group: "Reference", items: [["configuration", "Configuration"], ["webhook-api", "Webhook API"], ["data-adapters", "Data adapters"], ["chains", "Adding a chain"], ["data-model", "Data model"]] },
   { group: "Project", items: [["model-router", "Model router"], ["security", "Security"], ["roadmap", "Roadmap"], ["limitations", "Known limitations"], ["faq", "FAQ"]] },
 ];
@@ -73,10 +73,10 @@ export default function Docs() {
           {/* ---------------- Getting started ---------------- */}
           <Section id="introduction" eyebrow="Getting started" title="Introduction">
             <p>
-              Agentic Wallet Tracker follows a set of wallets on <strong>Robinhood Chain</strong> (chain ID 4663) and records everything they do:
-              token transfers, ETH sends, swaps, liquidity changes, LP position moves and stock-token trades. You open the{" "}
+              Agentic Wallet Tracker follows wallets on <strong>Robinhood Chain</strong> (chain ID 4663) and <strong>Solana</strong>, and records
+              what they do as plain actions: bought, sold, swapped, sent, received, added or removed liquidity, including stock-token trades. You open the{" "}
               <Link href="/app">app</Link>, add the wallets you care about, and their activity lands in your dashboard. Later phases add a{" "}
-              <a href="#model-router">router of open-source models</a> that turns those events into alerts, daily digests and answers.
+              <a href="#model-router">router of open-source models</a> that explains each meaningful move and investigates tokens and wallets on request.
             </p>
             <p>The tracker is <strong>read-only by design</strong>. It never asks for a private key, never connects a wallet for signing, and never sends a transaction.</p>
             <Callout title="Status">
@@ -91,10 +91,10 @@ export default function Docs() {
               slow and expensive, so the tracker filters by wallet first and only then reads the chain:
             </p>
             <ol className="steps">
-              <li><strong>Find.</strong> Ask the data provider for transaction hashes that touch a watched wallet in a block range. The Alchemy adapter uses the Transfers API (which includes native ETH); the RPC adapter uses <code>eth_getLogs</code> filtered on the wallet in the Transfer topics.</li>
-              <li><strong>Fetch.</strong> Load the receipt for each of those transactions, with every log and the block timestamp.</li>
-              <li><strong>Decode.</strong> Match each log by event signature and turn it into a typed event. See <a href="#event-types">Event types</a>.</li>
-              <li><strong>Store.</strong> Insert one row per wallet per log into <code>ChainEvent</code>. Inserts are idempotent, so replays are harmless.</li>
+              <li><strong>Find.</strong> Ask the data provider for transactions that touch a watched wallet. Robinhood Chain: Alchemy’s Transfers API, or <code>eth_getLogs</code> filtered on the wallet. Solana: <code>getSignaturesForAddress</code> per wallet.</li>
+              <li><strong>Fetch.</strong> Load each of those transactions in full: receipt and logs on Robinhood Chain, the parsed transaction with balances on Solana.</li>
+              <li><strong>Build actions.</strong> Work out each wallet’s net balance changes and turn them into one readable action. See <a href="#actions">Actions</a>. On Robinhood Chain every log is also decoded by event signature (<a href="#event-types">Event types</a>).</li>
+              <li><strong>Store.</strong> One <code>WalletAction</code> per wallet per transaction. Inserts are idempotent, so replays are harmless.</li>
             </ol>
             <h3>Two ways in: push and poll</h3>
             <p>
@@ -193,7 +193,8 @@ npm test                          # decoder, market hours, webhook signature`}</
 
           <Section id="watch-a-wallet" eyebrow="Using the tracker" title="Watch a wallet">
             <p>
-              In the app, paste any Robinhood Chain address into <em>Wallet address</em>, add an optional label (up to 40 characters) and press{" "}
+              In the app, paste any Robinhood Chain (<code>0x…</code>) or Solana address into <em>Wallet address</em>; the chain is detected from the
+              format, add an optional label (up to 40 characters) and press{" "}
               <em>Watch wallet</em>. Addresses are case-insensitive, and adding the same wallet twice is caught. Remove one at any time with{" "}
               <em>Remove</em>.
             </p>
@@ -211,19 +212,51 @@ DATABASE_URL="postgresql://…proxy.rlwy.net:…/railway" npm run db:seed`}</Cod
             </p>
           </Section>
 
+          <Section id="actions" eyebrow="Using the tracker" title="Actions">
+            <p>
+              Every transaction a watched wallet takes part in becomes one action, built from the wallet’s <strong>net balance changes</strong> rather
+              than from each DEX’s internals. That’s why the same logic works for Uniswap, Jupiter, Raydium, pump.fun or a router nobody has
+              heard of.
+            </p>
+            <div className="ref-scroll">
+              <table className="ref">
+                <thead><tr><th>Action</th><th>Means</th></tr></thead>
+                <tbody>
+                  <tr><td><code>BUY</code></td><td>Spent money (ETH, SOL or a stablecoin) and received a token.</td></tr>
+                  <tr><td><code>SELL</code></td><td>Gave up a token and received money.</td></tr>
+                  <tr><td><code>SWAP</code></td><td>Token for token, or one kind of money for another.</td></tr>
+                  <tr><td><code>SEND</code> / <code>RECEIVE</code></td><td>Something moved one way only; the other side is shown as the counterparty.</td></tr>
+                  <tr><td><code>LP_ADD</code> / <code>LP_REMOVE</code></td><td>Liquidity added to or removed from a pool (Robinhood Chain).</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>“Money” is the native coin (ETH, SOL), its wrapped form (WETH, wrapped SOL) and dollar stablecoins: USDG on Robinhood Chain, USDC and USDT on Solana. USD values come from the money side of the trade.</p>
+            <h3>Details that keep amounts honest</h3>
+            <ul>
+              <li><strong>Gas and network fees</strong> are left out: they aren’t part of the trade.</li>
+              <li><strong>Solana account rent</strong> paid to open a token account, and refunded when it closes, is left out too. Priority tips stay in.</li>
+              <li><strong>ETH paid out inside contracts</strong> (router unwraps, Uniswap v4 payouts, refunds) emits no event, so on Robinhood Chain the indexer reads the wallet’s exact ETH balance before and after the block.</li>
+              <li><strong>The venue</strong> is the aggregator when one was used (Jupiter), otherwise the first known DEX or launchpad in the transaction.</li>
+            </ul>
+            <Callout title="Watching a trading bot">
+              Many bots trade through their own smart contract: the wallet only signs and pays gas, while the contract holds and trades the
+              tokens. Watching the wallet then shows nothing. Watch the contract instead; it’s the address the wallet keeps calling.
+            </Callout>
+          </Section>
+
           <Section id="live-feed" eyebrow="Using the tracker" title="Public feed">
             <p>
-              <Link href="/feed">/feed</Link> is a public, read-only view of the latest 100 decoded events across everyone’s watched wallets, newest first. It shows what the indexer is doing without signing in. Wallets show their label
-              when they have one. Every transaction links to <code>robinhoodchain.blockscout.com</code> so you can verify it independently.
+              <Link href="/feed">/feed</Link> is a public, read-only sample: the latest 100 actions of a few <strong>showcase wallets</strong> chosen by
+              the operator. Users’ own watchlists and labels are private and never appear there. Every transaction links to the chain’s explorer
+              (Blockscout for Robinhood Chain, Solscan for Solana) so you can verify it independently.
             </p>
             <div className="ref-scroll">
               <table className="ref">
                 <thead><tr><th>Gauge</th><th>Meaning</th></tr></thead>
                 <tbody>
-                  <tr><td>Indexer</td><td>How far the indexer trails the chain head, in seconds. “not started” means the worker hasn’t completed a pass.</td></tr>
-                  <tr><td>Last block</td><td>The highest block the indexer has fully processed.</td></tr>
-                  <tr><td>Wallets</td><td>Wallets on the watchlist for this chain.</td></tr>
-                  <tr><td>Events</td><td>Total decoded events stored.</td></tr>
+                  <tr><td>Chain indexer</td><td>How far that chain’s indexer trails the chain head, in seconds. “not started”: no pass yet. “stalled”: no pass for 2 minutes.</td></tr>
+                  <tr><td>Wallets watched</td><td>Wallets watched by everyone, across chains (a count only).</td></tr>
+                  <tr><td>Actions recorded</td><td>Total actions stored, across chains.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -273,9 +306,10 @@ DATABASE_URL="postgresql://…proxy.rlwy.net:…/railway" npm run db:seed`}</Cod
                   <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>—</td><td>Postgres connection string.</td></tr>
                   <tr><td><code>REDIS_URL</code></td><td>Yes</td><td><code>redis://localhost:6379</code></td><td>Redis for the BullMQ job queue.</td></tr>
                   <tr><td><code>DATA_ADAPTER</code></td><td>No</td><td><code>alchemy</code></td><td><code>alchemy</code> or <code>rpc</code>. Alchemy needs a key, otherwise RPC is used.</td></tr>
-                  <tr><td><code>ALCHEMY_API_KEY</code></td><td>Recommended</td><td>—</td><td>From dashboard.alchemy.com, app on Robinhood Chain mainnet.</td></tr>
+                  <tr><td><code>ALCHEMY_API_KEY</code></td><td>Recommended</td><td>—</td><td>From dashboard.alchemy.com, with Robinhood Chain and Solana mainnet enabled. Also used for ETH and SOL prices.</td></tr>
                   <tr><td><code>ALCHEMY_WEBHOOK_SIGNING_KEY</code></td><td>For real-time</td><td>—</td><td>Signing key from the Alchemy webhook page.</td></tr>
                   <tr><td><code>ROBINHOOD_RPC_URL</code></td><td>No</td><td>public RPC</td><td>Override the rate-limited public RPC.</td></tr>
+                  <tr><td><code>SOLANA_RPC_URL</code></td><td>No</td><td>public RPC</td><td>Solana endpoint when there’s no Alchemy key. The public one is heavily rate limited.</td></tr>
                   <tr><td><code>INDEXER_POLL_MS</code></td><td>No</td><td><code>5000</code></td><td>Interval between indexer passes.</td></tr>
                   <tr><td><code>INDEXER_START_BLOCK</code></td><td>No</td><td><code>latest</code></td><td>Block to start from on the very first run.</td></tr>
                 </tbody>
@@ -318,7 +352,7 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
 
           <Section id="chains" eyebrow="Reference" title="Adding a chain">
             <ol className="steps">
-              <li>Create <code>src/chains/&lt;name&gt;.ts</code> exporting a <code>ChainConfig</code>, using <code>robinhood.ts</code> as the template.</li>
+              <li>Create <code>src/chains/&lt;name&gt;.ts</code> exporting a <code>ChainConfig</code>: <code>robinhood.ts</code> is the template for an EVM chain, <code>solana.ts</code> for Solana. List the chain’s money assets in <code>quoteAssets</code>.</li>
               <li>Register it in <code>src/chains/index.ts</code>.</li>
               <li>That’s it. The decoder matches events by signature and the indexer schedules one job per registered chain.</li>
             </ol>
@@ -344,7 +378,8 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
                   <tr><td><code>Chain</code>, <code>Token</code></td><td>1</td><td>Supported chains; known tokens incl. stock tokens and their price feeds.</td></tr>
                   <tr><td><code>User</code>, <code>WatchedWallet</code></td><td>1</td><td>Owners (a wallet address, or none for anonymous) and the wallets they follow, with labels.</td></tr>
                   <tr><td><code>Session</code></td><td>1</td><td>Signed-in browsers, stored as hashed keys with an expiry.</td></tr>
-                  <tr><td><code>ChainEvent</code></td><td>1</td><td>Every decoded event with its JSON payload.</td></tr>
+                  <tr><td><code>WalletAction</code></td><td>1</td><td>One readable action per wallet per transaction, with its legs and USD value.</td></tr>
+                  <tr><td><code>ChainEvent</code></td><td>1</td><td>Every decoded Robinhood Chain event with its JSON payload.</td></tr>
                   <tr><td><code>IndexerCursor</code></td><td>1</td><td>Last processed block and chain head, per chain.</td></tr>
                   <tr><td><code>AlertRule</code>, <code>Alert</code></td><td>2</td><td>User rules and the alerts they produced.</td></tr>
                   <tr><td><code>AiCall</code>, <code>CreditEntry</code></td><td>3, 5</td><td>Model usage and cost; the prepaid credit ledger.</td></tr>
@@ -410,7 +445,9 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
               <li>Uniswap contract addresses for chain 4663 aren’t filled in yet. Decoding works without them; they’re only used to tag “known DEX”.</li>
               <li>Stock-token addresses and price feeds must be added to <code>prisma/seed.ts</code> from docs.robinhood.com/chain/contracts.</li>
               <li>The RPC adapter doesn’t see native ETH sends that move no tokens. The Alchemy adapter does.</li>
-              <li>USD values aren’t computed at ingest yet. Pricing arrives in Phase 2.</li>
+              <li>USD values cover the money side of a trade (ETH, SOL, stablecoins); token-for-token swaps have none yet. Solana token symbols show as short mint addresses for now.</li>
+              <li>Solana is polled per wallet every few seconds; real-time Solana webhooks come later. Very busy wallets (hundreds of transactions a minute) cost many data-provider calls.</li>
+              <li>A wallet with two transactions in the same Robinhood Chain block falls back to an ETH estimate that can miss internal payouts.</li>
               <li>Webhook addresses are configured by hand in Alchemy until Phase 2 syncs them.</li>
               <li>The NYSE holiday list in <code>src/prices/market-hours.ts</code> needs a yearly update.</li>
             </ul>
@@ -426,25 +463,26 @@ Header: x-alchemy-signature: <hex HMAC-SHA256 of the raw body>`}</Code>
                 <summary>The feed says “indexer: not started”. What’s wrong?</summary>
                 <p>
                   The worker hasn’t completed a pass. Check that a separate worker service exists, that its config points to
-                  <code> /railway.worker.json</code>, and that its logs show <code>Indexer running</code> without <code>index job failed</code> errors.
+                  <code> /railway.worker.json</code>, and that its logs show <code>Indexer running</code> without <code>tick failed</code> errors.
+                  “stalled” means it ran before but stopped: check the worker’s logs.
                   It also needs the same <code>DATABASE_URL</code> and <code>REDIS_URL</code> as the web service.
                 </p>
               </details>
               <details>
                 <summary>The indexer is running but my activity is empty.</summary>
-                <p>Your wallets haven’t moved since you added them. Activity is recorded from the moment a wallet is added, so pick active wallets (see <a href="#watch-a-wallet">Watch a wallet</a>), or, as an operator, set <code>INDEXER_START_BLOCK</code> to backfill.</p>
+                <p>If the wallet is a trading bot, it may trade through its own contract: watch the contract (see <a href="#actions">Actions</a>). Otherwise your wallets haven’t moved since you added them. Activity is recorded from the moment a wallet is added, so pick active wallets (see <a href="#watch-a-wallet">Watch a wallet</a>), or, as an operator, set <code>INDEXER_START_BLOCK</code> to backfill.</p>
               </details>
               <details>
                 <summary>Which wallets can I track?</summary>
-                <p>Any address on Robinhood Chain. Wallet activity is public; the tracker organizes it, it doesn’t reveal anything that isn’t already on-chain.</p>
+                <p>Any address on Robinhood Chain or Solana. Wallet activity is public; the tracker organizes it, it doesn’t reveal anything that isn’t already on-chain.</p>
               </details>
               <details>
                 <summary>Do I need a wallet to use the app?</summary>
                 <p>No. Continue anonymously and your watchlist lives in that browser. Connect a wallet any time to keep it across devices.</p>
               </details>
               <details>
-                <summary>Why are there no USD values?</summary>
-                <p>Pricing is part of Phase 2. Phase 1 stores exact token amounts so values can be computed later without re-indexing.</p>
+                <summary>Why are some USD values missing?</summary>
+                <p>Values come from the ETH, SOL or stablecoin side of a trade, priced through Alchemy. Without <code>ALCHEMY_API_KEY</code>, or for token-for-token swaps, there’s no value yet. Exact token amounts are always stored, so values can be added later without re-indexing.</p>
               </details>
               <details>
                 <summary>Is this an official Robinhood product?</summary>

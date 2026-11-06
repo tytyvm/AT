@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { addressUrl, getChain, txUrl } from "@/chains";
+import { addressUrl, getChain } from "@/chains";
+import { shortAddress } from "@/lib/address";
 import { getSessionUser } from "@/lib/session";
-import { describeLag, getIndexerStatus } from "@/lib/status";
+import { describeLag, getAllStatuses, isRunning } from "@/lib/status";
 import { MAX_WALLETS_PER_USER } from "@/lib/watchlist";
+import { ActionList, ChainBadge } from "../_components/actions";
 import { Mark } from "../_components/chrome";
 import { AddWalletForm } from "./add-wallet";
 import { removeWallet, signOut } from "./actions";
 import { ConnectWallet, SignIn } from "./sign-in";
 
 export const metadata: Metadata = { title: "App" };
-
-const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
 
 function AppBar({ account }: { account?: string }) {
   return (
@@ -42,17 +42,23 @@ export default async function AppPage() {
     );
   }
 
-  const chain = getChain(4663);
-  const [status, wallets] = await Promise.all([
-    getIndexerStatus(chain.id),
-    prisma.watchedWallet.findMany({ where: { userId: user.id, chainId: chain.id }, orderBy: { createdAt: "asc" } }),
+  const [statuses, wallets] = await Promise.all([
+    getAllStatuses(),
+    prisma.watchedWallet.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
   ]);
-  const labels = new Map(wallets.map((w) => [w.address, w.label]));
-  const events = wallets.length
-    ? await prisma.chainEvent.findMany({ where: { chainId: chain.id, wallet: { in: [...labels.keys()] } }, orderBy: { timestamp: "desc" }, take: 100 })
+  const labels = new Map(wallets.map((w) => [`${w.chainId}:${w.address}`, w.label]));
+  const actions = wallets.length
+    ? await prisma.walletAction.findMany({
+        where: { OR: wallets.map((w) => ({ chainId: w.chainId, wallet: w.address })) },
+        orderBy: { timestamp: "desc" },
+        take: 100,
+      })
     : [];
-  const running = status.ok && status.lagBlocks !== null;
-  const account = user.walletAddress ? short(user.walletAddress) : "Anonymous";
+  // Only chains the user actually watches matter for the "is it running" message.
+  const watchedChains = new Set(wallets.map((w) => w.chainId));
+  const relevant = statuses.filter((s) => watchedChains.has(s.chain.id));
+  const notRunning = relevant.filter((s) => s.ok && !isRunning(s));
+  const account = user.walletAddress ? shortAddress(user.walletAddress) : "Anonymous";
 
   return (
     <>
@@ -65,14 +71,14 @@ export default async function AppPage() {
           </div>
           <AddWalletForm disabled={wallets.length >= MAX_WALLETS_PER_USER} />
           {wallets.length === 0 ? (
-            <p className="panel-empty">Nothing here yet. Add a wallet above. Good places to find active ones: “Top accounts” on the block explorer.</p>
+            <p className="panel-empty">Nothing here yet. Paste a Robinhood Chain or Solana address above; the chain is detected for you.</p>
           ) : (
             <ul className="watchlist">
               {wallets.map((w) => (
                 <li key={w.id}>
                   <div>
-                    <strong>{w.label}</strong>
-                    <a href={addressUrl(chain, w.address)} target="_blank" rel="noreferrer">{short(w.address)} ↗</a>
+                    <strong><ChainBadge chainId={w.chainId} /> {w.label}</strong>
+                    <a href={addressUrl(getChain(w.chainId), w.address)} target="_blank" rel="noreferrer">{shortAddress(w.address)} ↗</a>
                   </div>
                   <form action={removeWallet}>
                     <input type="hidden" name="id" value={w.id} />
@@ -93,43 +99,34 @@ export default async function AppPage() {
         <section className="activity">
           <div className="activity-head">
             <h1>Activity</h1>
-            <span className={`pill ${running ? "pill-live" : "pill-off"}`}>Indexer · {running ? `${status.lagSeconds!.toFixed(1)}s behind` : describeLag(status)}</span>
+            <div className="pills">
+              {statuses.map((s) => (
+                <span key={s.chain.id} className={`pill ${isRunning(s) ? "pill-live" : "pill-off"}`}>{s.chain.name} · {describeLag(s)}</span>
+              ))}
+            </div>
           </div>
 
-          {events.length === 0 ? (
+          {actions.length === 0 ? (
             <div className="empty">
               <h2>{wallets.length ? "Waiting for the first move." : "Add a wallet to start."}</h2>
               <p>
                 {wallets.length
-                  ? "The indexer records activity from the moment a wallet is added. As soon as one of yours transfers, swaps or moves liquidity, it lands here."
-                  : "Once you add a wallet, every transfer, swap and liquidity move it makes on Robinhood Chain shows up here, newest first."}
+                  ? "Activity is recorded from the moment a wallet is added. As soon as one of yours buys, sells, swaps or moves funds, it lands here."
+                  : "Once you add a wallet, every buy, sell, swap and transfer it makes on Robinhood Chain or Solana shows up here, newest first."}
               </p>
-              {!running && status.ok && <p>The indexer isn’t running yet, so nothing new is being recorded. <Link href="/docs#faq">Why?</Link></p>}
+              {notRunning.length > 0 && (
+                <p>The indexer for {notRunning.map((s) => s.chain.name).join(" and ")} isn’t running, so nothing new is being recorded there. <Link href="/docs#faq">Why?</Link></p>
+              )}
             </div>
           ) : (
-            <div className="table-scroll">
-              <table className="events">
-                <thead><tr><th>Time (UTC)</th><th>Wallet</th><th>Event</th><th>Protocol</th><th>Tx</th></tr></thead>
-                <tbody>
-                  {events.map((e) => (
-                    <tr key={e.id}>
-                      <td>{e.timestamp.toISOString().replace("T", " ").slice(0, 19)}</td>
-                      <td>{labels.get(e.wallet) ?? short(e.wallet)}</td>
-                      <td><span className="kind">{e.kind}</span></td>
-                      <td>{e.protocol ?? "—"}</td>
-                      <td><a href={txUrl(chain, e.txHash)} target="_blank" rel="noreferrer">{short(e.txHash)} ↗</a></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ActionList actions={actions} labels={labels} />
           )}
 
           <div className="agent-card">
-            <span className="label">Agent · arriving in Phase 3</span>
+            <span className="label">Agent · coming next</span>
             <p>
-              Soon, alerts, daily digests and questions about your wallets will be handled by the model router. Each job goes to the
-              cheapest open-source model that can do it well.
+              Soon each meaningful move gets an explanation: who the counterparty is, where the money came from, and whether it lines up
+              with the deployer or other wallets. Written by the cheapest open-source model that can do the job well.
             </p>
             <Link href="/#router">How the router works →</Link>
           </div>

@@ -365,3 +365,12 @@ code, pre, kbd { font-family: var(--mono); }
 .tenets dd { margin: 6px 0 0; font-size: 16px; color: var(--ink-2); }
 @media (max-width: 860px) { .tenets { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tenets div:nth-child(3) { padding-left: 0; border-left: 0; } .tenets div:nth-child(n+3) { margin-top: 16px; } }
 @media (max-width: 480px) { .tenets { grid-template-columns: 1fr; } .tenets div + div { padding-left: 0; border-left: 0; margin-top: 16px; } }
+
+/* ---------- Multi-chain ---------- */
+.chain { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .06em; padding: 1px 5px; border: 1px solid currentColor; vertical-align: 1px; }
+.chain-robinhood { color: var(--moss); }
+.chain-solana { color: var(--accent); }
+.add-wallet .hint { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.events td.act { white-space: normal; min-width: 240px; font-family: var(--serif); font-size: 15px; }
+.act .venue { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }

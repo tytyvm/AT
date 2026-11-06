@@ -1,4 +1,4 @@
-import type { ChainConfig } from "@/chains";
+import type { EvmChainConfig } from "@/chains";
 import type { Hex } from "../types";
 import { RpcAdapter } from "./rpc";
 
@@ -13,7 +13,7 @@ export class AlchemyAdapter extends RpcAdapter {
   readonly name = "alchemy";
   private url: string;
 
-  constructor(chain: ChainConfig, apiKey: string) {
+  constructor(chain: EvmChainConfig, apiKey: string) {
     if (!chain.alchemyNetwork) throw new Error(`Alchemy doesn't support ${chain.name}`);
     const url = `https://${chain.alchemyNetwork}.g.alchemy.com/v2/${apiKey}`;
     super(chain, url);

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SiteFooter, SiteHeader, Tape } from "./_components/chrome";
-import { describeLag, getIndexerStatus } from "@/lib/status";
+import { describeLag, getAllStatuses, isRunning } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
@@ -57,20 +57,20 @@ const PHASES: { ph: string; dest: string; detail: string; status: "arrived" | "b
 ];
 
 export default async function Home() {
-  const s = await getIndexerStatus();
-  const lag = describeLag(s);
-  const running = s.ok && s.lagBlocks !== null;
+  const statuses = await getAllStatuses();
+  const wallets = statuses.reduce((n, s) => n + s.wallets, 0);
+  const actions = statuses.reduce((n, s) => n + s.actions, 0);
 
   return (
     <>
       <SiteHeader current="home" />
       <Tape
         items={[
-          <><b>CHAIN</b> 4663 · Robinhood Chain mainnet</>,
-          <><b>BLOCK TIME</b> ~100 ms</>,
-          <><b>INDEXER</b> <span className={running ? "live" : "warn"}>{lag}</span></>,
-          <><b>WATCHING</b> {s.wallets.toLocaleString("en-US")} wallets</>,
-          <><b>EVENTS DECODED</b> {s.events.toLocaleString("en-US")}</>,
+          <><b>CHAINS</b> Robinhood Chain · Solana</>,
+          ...statuses.map((s) => <><b>{s.chain.name.toUpperCase()}</b> <span className={isRunning(s) ? "live" : "warn"}>{describeLag(s)}</span></>),
+          <><b>WATCHING</b> {wallets.toLocaleString("en-US")} wallets</>,
+          <><b>ACTIONS RECORDED</b> {actions.toLocaleString("en-US")}</>,
+          <><b>VENUES</b> Uniswap · Jupiter · Raydium · pump.fun</>,
           <><b>DEX</b> Uniswap v2 · v3 · v4</>,
           <><b>STOCK TOKENS</b> ERC-8056 aware</>,
           <><b>KEYS HELD</b> 0</>,
@@ -80,12 +80,12 @@ export default async function Home() {
       <main>
         <div className="wrap hero">
           <div>
-            <span className="label">Agentic wallet tracking · Robinhood Chain</span>
+            <span className="label">Agentic wallet tracking · Robinhood Chain + Solana</span>
             <h1>
               Every move a wallet makes, <em>read back to you.</em>
             </h1>
             <p className="lede">
-              Pick the wallets you care about: a fund, a whale, your own. The tracker follows them across Robinhood Chain, and a
+              Pick the wallets you care about: a fund, a whale, your own. The tracker follows them across Robinhood Chain and Solana, and a
               router of open-source models turns what they do into alerts, digests and answers. It’s cheap, it’s anonymous, and it
               only ever reads: no email, no keys, no transactions.
             </p>
@@ -127,8 +127,8 @@ export default async function Home() {
             <strong>864<span>,</span>000</strong>
             <div>
               <p>
-                blocks a day. Robinhood Chain seals one roughly every tenth of a second. Reading all of them to follow a handful of
-                wallets would be slow and expensive, so we don’t. <span className="accent">We read only the transactions your wallets touch.</span>
+                blocks a day on Robinhood Chain alone, one roughly every tenth of a second; Solana adds over 200,000 slots. Reading
+                all of them to follow a handful of wallets would be slow and expensive, so we don’t. <span className="accent">We read only the transactions your wallets touch.</span>
               </p>
               <p className="math">86,400 s ÷ 0.1 s per block = 864,000</p>
             </div>

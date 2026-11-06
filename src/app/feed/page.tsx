@@ -1,89 +1,74 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { addressUrl, getChain, txUrl } from "@/chains";
-import { describeLag, getIndexerStatus } from "@/lib/status";
+import { SHOWCASE_EMAIL } from "@/lib/showcase";
+import { describeLag, getAllStatuses, isRunning } from "@/lib/status";
+import { ActionList } from "../_components/actions";
 import { SiteFooter, SiteHeader } from "../_components/chrome";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Live feed" };
 
-const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`;
-
+// Public, read-only. Shows only the operator's showcase wallets: users' own watchlists stay private.
 export default async function Feed() {
-  const chain = getChain(4663);
-  const s = await getIndexerStatus(chain.id);
-  const [events, wallets] = s.ok
-    ? await Promise.all([
-        prisma.chainEvent.findMany({ orderBy: { timestamp: "desc" }, take: 100 }),
-        prisma.watchedWallet.findMany({ where: { chainId: chain.id }, select: { address: true, label: true } }),
-      ]).catch(() => [[], []] as const)
-    : ([[], []] as const);
-  const labels = new Map(wallets.map((w) => [w.address, w.label]));
-  const running = s.ok && s.lagBlocks !== null;
+  const statuses = await getAllStatuses();
+  const dbOk = statuses.every((s) => s.ok);
+  const showcase = dbOk
+    ? await prisma.watchedWallet.findMany({ where: { user: { email: SHOWCASE_EMAIL } }, select: { chainId: true, address: true, label: true } }).catch(() => [])
+    : [];
+  const actions = showcase.length
+    ? await prisma.walletAction.findMany({
+        where: { OR: showcase.map((w) => ({ chainId: w.chainId, wallet: w.address })) },
+        orderBy: { timestamp: "desc" },
+        take: 100,
+      }).catch(() => [])
+    : [];
+  const labels = new Map(showcase.map((w) => [`${w.chainId}:${w.address}`, w.label]));
+  const totalActions = statuses.reduce((n, s) => n + s.actions, 0);
+  const totalWallets = statuses.reduce((n, s) => n + s.wallets, 0);
 
   return (
     <>
       <SiteHeader current="feed" />
       <main className="wrap">
         <div className="feed-head">
-          <span className="label">Live feed · {chain.name}</span>
-          <h1>What the watched wallets did, newest first.</h1>
-          <p>The latest 100 decoded events across every wallet on the watchlist. Times are UTC. Click a transaction to verify it on the explorer.</p>
+          <span className="label">Live feed · Robinhood Chain + Solana</span>
+          <h1>What the showcase wallets did, newest first.</h1>
+          <p>
+            A public sample of what the tracker records: buys, sells, swaps and transfers for a few showcase wallets. Your own
+            watchlist is private. <Link href="/app">Launch the app</Link> to build one.
+          </p>
         </div>
 
         <div className="gauges">
+          {statuses.map((s) => (
+            <div className="gauge" key={s.chain.id}>
+              <span className="label">{s.chain.name} indexer</span>
+              <strong className={isRunning(s) ? undefined : "off"}>{isRunning(s) ? `${s.lagSeconds!.toFixed(1)}s` : describeLag(s)}</strong>
+            </div>
+          ))}
           <div className="gauge">
-            <span className="label">Indexer</span>
-            <strong className={running ? undefined : "off"}>{running ? `${s.lagSeconds!.toFixed(1)}s` : describeLag(s)}</strong>
+            <span className="label">Wallets watched</span>
+            <strong>{totalWallets.toLocaleString("en-US")}</strong>
           </div>
           <div className="gauge">
-            <span className="label">Last block</span>
-            <strong>{s.lastBlock ? Number(s.lastBlock).toLocaleString("en-US") : "—"}</strong>
-          </div>
-          <div className="gauge">
-            <span className="label">Wallets</span>
-            <strong>{s.wallets.toLocaleString("en-US")}</strong>
-          </div>
-          <div className="gauge">
-            <span className="label">Events</span>
-            <strong>{s.events.toLocaleString("en-US")}</strong>
+            <span className="label">Actions recorded</span>
+            <strong>{totalActions.toLocaleString("en-US")}</strong>
           </div>
         </div>
 
-        {events.length === 0 ? (
+        {actions.length === 0 ? (
           <div className="empty">
             <h2>The tape is quiet.</h2>
-            {!s.ok && <p>The database can’t be reached right now, so there’s nothing to show.</p>}
-            {s.ok && !running && (
-              <p>
-                The indexer hasn’t completed its first pass yet. If this lasts more than a minute, the worker process isn’t running. See{" "}
-                <Link href="/docs#faq">the FAQ</Link>.
-              </p>
+            {!dbOk && <p>The database can’t be reached right now, so there’s nothing to show.</p>}
+            {dbOk && !showcase.length && <p>No showcase wallets are set up yet. <Link href="/docs#watch-a-wallet">Operators can seed some.</Link></p>}
+            {dbOk && showcase.length > 0 && <p>The showcase wallets haven’t moved since they were added. Actions appear here as soon as they do.</p>}
+            {dbOk && statuses.some((s) => !isRunning(s)) && (
+              <p>An indexer isn’t running, so nothing new is being recorded there. <Link href="/docs#faq">See the FAQ</Link>.</p>
             )}
-            {s.ok && s.wallets === 0 && <p>No wallets are on the watchlist yet. <Link href="/docs#watch-a-wallet">Here’s how to add one.</Link></p>}
-            {s.ok && running && s.wallets > 0 && <p>The indexer is running. Events appear here as soon as a watched wallet moves.</p>}
           </div>
         ) : (
-          <div className="table-scroll">
-            <table className="events">
-              <thead>
-                <tr><th>Time (UTC)</th><th>Wallet</th><th>Event</th><th>Protocol</th><th>Block</th><th>Tx</th></tr>
-              </thead>
-              <tbody>
-                {events.map((e) => (
-                  <tr key={e.id}>
-                    <td>{e.timestamp.toISOString().replace("T", " ").slice(0, 19)}</td>
-                    <td><a href={addressUrl(chain, e.wallet)} target="_blank" rel="noreferrer">{labels.get(e.wallet) ?? short(e.wallet)}</a></td>
-                    <td><span className="kind">{e.kind}</span></td>
-                    <td>{e.protocol ?? "—"}</td>
-                    <td>{e.blockNumber.toLocaleString("en-US")}</td>
-                    <td><a href={txUrl(chain, e.txHash)} target="_blank" rel="noreferrer">{short(e.txHash)} ↗</a></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ActionList actions={actions} labels={labels} />
         )}
       </main>
       <SiteFooter />
